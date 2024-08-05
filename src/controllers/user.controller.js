@@ -130,7 +130,7 @@ const loginUser = asyncHandler(async (req, res) =>{
    const isPasswordValid = await user.isPasswordCorrect(password)
 
    if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid user credentials")
+    throw new ApiError(401, "Invalid user password")
     }
 
    const {accessToken, refreshToken} = await generateAccessAndRefereshTokens(user._id)
@@ -294,6 +294,7 @@ const updateUserAvatar = asyncHandler(async(req, res) => {
     }
 
     //TODO: delete old image - assignment
+    // const deleteavatar = await deleteOnCloudinary(avatarLocalPath)
 
     const avatar = await uploadOnCloudinary(avatarLocalPath)
 
