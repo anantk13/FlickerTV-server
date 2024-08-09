@@ -116,7 +116,12 @@ const getVideoById = asyncHandler(async (req, res) => {
     if(!isValidObjectId(videoId)){
         throw new ApiError(400, "videoId is invalid")
     }
+    
     const video = await Video.findById(videoId)
+
+    video.views += 1;
+    await video.save();
+
     return res
     .status(200)
     .json(new ApiResponse(
@@ -124,6 +129,24 @@ const getVideoById = asyncHandler(async (req, res) => {
         video,
         "Video fetched successfully"
     ))
+})
+
+const toggleVideoLike = asyncHandler(async (req, res) => {
+    const {videoId} = req.params
+    //TODO: toggle like on video
+    if(!isValidObjectId(videoId)){
+        throw new ApiError(400, "videoId is invalid")
+    }
+    const video = await Video.findById(videoId)
+
+    video.likes += 1;
+    await video.save();
+
+    return res
+    .status(200)
+    .json(
+        new ApiResponse(200, savedLike, "Video Liked successfully")
+    )
 })
 
 const updateVideo = asyncHandler(async (req, res) => {
@@ -222,6 +245,7 @@ export {
     getAllVideos,
     publishAVideo,
     getVideoById,
+    toggleVideoLike,
     updateVideo,
     deleteVideo,
     togglePublishStatus
