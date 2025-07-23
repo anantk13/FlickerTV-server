@@ -32,5 +32,5 @@ This is the **backend** of **FlickerTV**, a full-stack video-sharing platform in
 
 ---
 
-## 📂 Folder Structure
+
 
