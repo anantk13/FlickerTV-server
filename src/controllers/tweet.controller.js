@@ -1,124 +1,265 @@
-import mongoose, { isValidObjectId } from "mongoose"
-import {Tweet} from "../models/tweet.model.js"
-import {User} from "../models/user.model.js"
-import {ApiError} from "../utils/ApiError.js"
-import {ApiResponse} from "../utils/ApiResponse.js"
-import {asyncHandler} from "../utils/asyncHandler.js"
-
-const createTweet = asyncHandler(async (req, res) => {
-    //TODO: create tweet
-    const {content} = req.body
-    if (
-        [content].some((field) => field?.trim() === "")
-    ) {
-        throw new ApiError(400, "content is required")
-    }
-    // const user = await User.findById()
-    const tweet = await Tweet.create({
-        content,
-        owner:req.user?._id
-    })
-
-    return res.status(201).json(
-        new ApiResponse(200, tweet, "Tweet uploaded")
-    )
-})
+import mongoose, { isValidObjectId } from "mongoose";
+import { Tweet } from "../models/tweet.model.js";
+import { User } from "../models/user.model.js";
+import { ApiError } from "../utils/ApiError.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
 const getUserTweets = asyncHandler(async (req, res) => {
-    // TODO: get user tweets
+  const { userId } = req.params;
+  const { page = 1, limit = 10 } = req.query;
 
-        const { userId } = req.params;
-        const { page = 1, limit = 10, sortBy = 'createdAt', sortType = 'desc' } = req.query;
-    
-        if (!isValidObjectId(userId)) {
-            throw new ApiError(400, "Invalid userId");
-        }
+  if (!isValidObjectId(userId)) {
+    throw new ApiError(400, "Invalid userId");
+  }
 
-        const user = await User.findById(userId)
-        // Calculate the number of documents to skip
-        const skip = (page - 1) * limit;
-    
-        // Find the tweets for the user, with pagination and sorting
-        const tweets = await Tweet.find({ owner: userId })
-            .sort({ [sortBy]: sortType === 'asc' ? 1 : -1 })
-            .skip(skip)
-            .limit(Number(limit));
-    
-        // Count total number of tweets for the user
-        const totalTweets = await Tweet.countDocuments({ owner: userId });
-    
-        // Calculate total pages
-        const totalPages = Math.ceil(totalTweets / limit);
+  const aggregationPipeline = [
+    {
+      $match: {
+        owner: new mongoose.Types.ObjectId(userId),
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "ownerDetails",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              "avatar.url": 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "tweet",
+        as: "likeDetails",
+        pipeline: [
+          {
+            $project: {
+              likedBy: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        likesCount: {
+          $size: "$likeDetails",
+        },
+        ownerDetails: {
+          $first: "$ownerDetails",
+        },
+        isLiked: {
+          $cond: {
+            if: { $in: [req.user?._id, "$likeDetails.likedBy"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    {
+      $sort: {
+        createdAt: -1,
+      },
+    },
+    {
+      $project: {
+        content: 1,
+        ownerDetails: 1,
+        likesCount: 1,
+        createdAt: 1,
+        isLiked: 1,
+      },
+    },
+  ];
 
-        res.status(200).json(
-            new ApiResponse(200, {
-                tweets,
-                username:user.username,
-                pagination: {
-                    totalTweets,
-                    totalPages,
-                    currentPage: Number(page),
-                    pageSize: Number(limit)
-                }
-            }, "User tweets retrieved successfully"
-        )
-        )
-    
-})
+  const options = {
+    page: parseInt(page, 10),
+    limit: parseInt(limit, 10),
+  };
+
+  const tweets = await Tweet.aggregatePaginate(
+    Tweet.aggregate(aggregationPipeline),
+    options
+  );
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, tweets, "Tweets fetched successfully"));
+});
+
+const getAllTweets = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 10 } = req.query;
+  const isGuest = req.query.guest === "true";
+
+  const aggregationPipeline = [
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "ownerDetails",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              "avatar.url": 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "tweet",
+        as: "likeDetails",
+        pipeline: [
+          {
+            $project: {
+              likedBy: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        likesCount: {
+          $size: "$likeDetails",
+        },
+        ownerDetails: {
+          $first: "$ownerDetails",
+        },
+        isLiked: {
+          $cond: {
+            if: isGuest,
+            then: false,
+            else: {
+              $cond: {
+                if: { $in: [req.user?._id, "$likeDetails.likedBy"] },
+                then: true,
+                else: false,
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      $sort: {
+        createdAt: -1,
+      },
+    },
+    {
+      $project: {
+        content: 1,
+        ownerDetails: 1,
+        likesCount: 1,
+        createdAt: 1,
+        isLiked: 1,
+      },
+    },
+  ];
+
+  const options = {
+    page: parseInt(page, 10),
+    limit: parseInt(limit, 10),
+  };
+
+  const tweets = await Tweet.aggregatePaginate(
+    Tweet.aggregate(aggregationPipeline),
+    options
+  );
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, tweets, "Tweets fetched successfully"));
+});
+
+const createTweet = asyncHandler(async (req, res) => {
+  const { content } = req.body;
+  const userId = req.user?._id;
+
+  if (!content) throw new ApiError(401, "Tweet content is required");
+
+  const tweet = await Tweet.create({
+    content,
+    owner: userId,
+  });
+
+  if (!tweet) throw new ApiError(501, "Tweet creation failed");
+
+  return res
+    .status(201)
+    .json(new ApiResponse(201, tweet, "Tweet created successfully"));
+});
 
 const updateTweet = asyncHandler(async (req, res) => {
-    //TODO: update tweet
-    const {tweetId} = req.params
-    const {content} = req.body
-    if(!isValidObjectId(tweetId)){
-        throw new ApiError(400, "Invalid tweetId");
-    }
-    if (
-        [content].some((field) => field?.trim() === "")
-    ) {
-        throw new ApiError(400, "content is required")
-    }
-    const tweet = await Tweet.findByIdAndUpdate(tweetId,{
-        $set: {
-            content
-        }
-    })
+  const { tweetId } = req.params;
+  const { content } = req.body;
 
-    if(!tweet){
-        throw new ApiError(400,"Error in updating tweet")
-    }
+  if (!content) throw new ApiError(401, "Tweet content is required to update");
 
-    return res
-    .status(200)
-    .json(
-        new ApiResponse(200, tweet, "Tweet updated successfully")
-    )
-})
+  if (!isValidObjectId(tweetId)) {
+    throw new ApiError(400, "Invalid tweetId");
+  }
+
+  const tweet = await Tweet.findById(tweetId);
+
+  if (!tweet) {
+    throw new ApiError(404, "Tweet not found");
+  }
+
+  if (tweet?.owner.toString() !== req.user?._id.toString()) {
+    throw new ApiError(400, "only owner can edit thier tweet");
+  }
+
+  const updatedTweet = await Tweet.findByIdAndUpdate(
+    tweetId,
+    {
+      $set: { content },
+    },
+    { new: true }
+  );
+
+  if (!updatedTweet) throw new ApiError(501, "Tweet updation failed");
+
+  return res
+    .status(201)
+    .json(new ApiResponse(201, updatedTweet, "Tweet successfully updated"));
+});
 
 const deleteTweet = asyncHandler(async (req, res) => {
-    //TODO: delete tweet
-    const {tweetId} = req.params
-    if(!isValidObjectId(tweetId)){
-        throw new ApiError(400, "Invalid tweetId");
-    }
+  const { tweetId } = req.params;
+  const userId = req.user?._id;
 
-   const tweet = await Tweet.findByIdAndDelete(tweetId)
+  if (!isValidObjectId(tweetId)) throw new ApiError(401, "Invalid tweetId");
 
-   if(!tweet){
-    throw new ApiError(400,"Error in deleting tweet")
-}
+  const tweet = await Tweet.findById(tweetId);
 
-return res
-.status(200)
-.json(
-    new ApiResponse(200, tweet, "Tweet deleted successfully")
-)
+  if (!tweet) throw new ApiError(404, "Tweet not found");
 
-})
+  if (tweet?.owner.toString() !== userId.toString()) {
+    throw new ApiError(401, "Only Tweet Owner can delete their tweet");
+  }
 
-export {
-    createTweet,
-    getUserTweets,
-    updateTweet,
-    deleteTweet
-}
+  await Tweet.findByIdAndDelete(tweetId);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, null, "Tweet deleted successfully"));
+});
+
+export { createTweet, getUserTweets, updateTweet, deleteTweet, getAllTweets };

@@ -1,42 +1,50 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
-    deleteVideo,
-    getAllVideos,
-    getVideoById,
-    publishAVideo,
-    togglePublishStatus,
-    updateVideo,
-} from "../controllers/video.controller.js"
-import {verifyJWT} from "../middlewares/auth.middleware.js"
-import {upload} from "../middlewares/multer.middleware.js"
+  deleteVideo,
+  getAllVideos,
+  getVideoById,
+  publishAVideo,
+  togglePublishStatus,
+  updateVideo,
+  getNextVideos,
+  updateVideoViews,
+  getVideoByIdForGuest,
+} from "../controllers/video.controller.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { upload } from "../middlewares/multer.middleware.js";
 
 const router = Router();
-router.use(verifyJWT); // Apply verifyJWT middleware to all routes in this file
 
 router
-    .route("/publishAvideo")
-    .get(getAllVideos)
-    .post(
-        upload.fields([
-            {
-                name: "videoFile",
-                maxCount: 1,
-            },
-            {
-                name: "thumbnail",
-                maxCount: 1,
-            },
-            
-        ]),verifyJWT,
-        publishAVideo
-    );
+  .route("/")
+  .get(getAllVideos)
+  .post(
+    verifyJWT,
+    upload.fields([
+      {
+        name: "video",
+        maxCount: 1,
+      },
+      {
+        name: "thumbnail",
+        maxCount: 1,
+      },
+    ]),
+    publishAVideo
+  );
 
 router
-    .route("/:videoId")
-    .get(getVideoById)
-    .delete(deleteVideo)
-    .patch(upload.single("thumbnail"), updateVideo);
+  .route("/v/:videoId")
+  .get(verifyJWT, getVideoById)
+  .delete(verifyJWT, deleteVideo)
+  .patch(verifyJWT, upload.single("thumbnail"), updateVideo);
 
-router.route("/toggle/publish/:videoId").patch(togglePublishStatus);
+router.route("/toggle/publish/:videoId").patch(verifyJWT, togglePublishStatus);
 
-export default router
+router.route("/next/:videoId").get(getNextVideos);
+
+router.route("/v/guest/:videoId").get(getVideoByIdForGuest);
+
+router.route("/update/views/:videoId").patch(verifyJWT, updateVideoViews);
+
+export default router;
