@@ -9,10 +9,7 @@ const app = express();
 const allowedOrigins = [
   // process.env.CORS_ORIGIN_PRODUCTION,
   // process.env.CORS_ORIGIN_DEV,
-  "https://videotube-frontend.vercel.app",
   "http://localhost:5173",
-  "https://videotube-rust.vercel.app",
-  "http://localhost:5174",
   "https://flicker-tv-client.vercel.app/",
 ];
 
