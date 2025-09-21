@@ -10,7 +10,7 @@ const allowedOrigins = [
   // process.env.CORS_ORIGIN_PRODUCTION,
   // process.env.CORS_ORIGIN_DEV,
   "http://localhost:5173",
-  "https://flicker-tv-client.vercel.app/",
+  "https://flicker-tv-client.vercel.app",
 ];
 
 // Log allowed origins to verify they are set correctly
