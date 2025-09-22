@@ -34,6 +34,10 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(express.static("public"));
 app.use(cookieParser());
 
+app.get("/", (req, res) => {
+  res.status(200).json({ message: "FlickerTV backend is running!" });
+});
+
 app.use((req, res, next) => {
   res.setHeader("Content-Type", "application/json");
   next();
