@@ -12,116 +12,44 @@ import {
   deleteFromCloudinary,
 } from "../utils/cloudinary.js";
 
-const getAllVideos = asyncHandler(async (req, res) => {
-  let { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
-  page = Math.max(parseInt(page, 10) || 1, 1);
-  limit = Math.max(parseInt(limit, 10) || 10, 1);
+export const getAllVideos = async (req, res) => {
+  try {
+    const { query } = req.query;
+    const page = parseInt(req.query.page, 10) || 1;
+    const PAGE_SIZE = 10;
 
-  const pipeline = [];
+    let videos;
 
-  if (query) {
-    pipeline.push({
-      $search: {
-        index: "search-videos",
-        text: { query, path: ["title", "description"] },
-      },
-    });
-  }
-
-  if (userId) {
-    if (!isValidObjectId(userId)) {
-      throw new ApiError(400, "Invalid userId");
+    if (query) {
+      // Search using Atlas Full-Text Search
+      videos = await Video.aggregate([
+        {
+          $search: {
+            index: "default", // your Atlas search index
+            text: {
+              query,
+              path: ["title", "description"], // fields to search
+            },
+          },
+        },
+        { $skip: (page - 1) * PAGE_SIZE },
+        { $limit: PAGE_SIZE },
+        { $project: { title: 1, description: 1, thumbnail: 1, createdAt: 1 } },
+      ]);
+    } else {
+      // No search → return all videos paginated
+      videos = await Video.find({})
+        .skip((page - 1) * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+        .select("title description thumbnail createdAt");
     }
-    pipeline.push({ $match: { owner: new mongoose.Types.ObjectId(userId) } });
+
+    res.status(200).json({ videos });
+  } catch (err) {
+    console.error("getAllVideos Error:", err);
+    res.status(500).json({ message: "Internal Server Error" });
   }
-
-  pipeline.push({ $match: { isPublished: true } });
-
-  if (sortBy && sortType) {
-    pipeline.push({ $sort: { [sortBy]: sortType === "asc" ? 1 : -1 } });
-  } else {
-    pipeline.push({ $sort: { createdAt: -1 } });
-  }
-
-  pipeline.push(
-    {
-      $lookup: {
-        from: "users",
-        localField: "owner",
-        foreignField: "_id",
-        as: "ownerDetails",
-        pipeline: [{ $project: { username: 1, "avatar.url": 1 } }],
-      },
-    },
-    {
-      $unwind: { path: "$ownerDetails", preserveNullAndEmptyArrays: true },
-    }
-  );
-
-  const videoAggregate = Video.aggregate(pipeline);
-
-  const videos = await Video.aggregatePaginate(videoAggregate, { page, limit });
-
-  return res
-    .status(200)
-    .json(new ApiResponse(200, videos, "Videos fetched successfully"));
-});
-
-
-const publishAVideo = asyncHandler(async (req, res) => {
-  const { title, description, isPublished } = req.body;
-
-  if (
-    [title, description, isPublished].some(
-      (field) => field === undefined || field?.trim() === ""
-    )
-  ) {
-    throw new ApiError(400, "All fields are required");
-  }
-
-  const videoLocalPath = req.files?.video[0]?.path;
-
-  if (!videoLocalPath) throw new ApiError(401, "Video is required to publish");
-
-  const thumbnailLocalPath = req.files?.thumbnail[0]?.path;
-
-  if (!thumbnailLocalPath)
-    throw new ApiError(401, "Thumbnail is required to publish");
-
-  const [videoFile, thumbnailFile] = await Promise.all([
-    uploadOnCloudinary(videoLocalPath, video_upOptions),
-    uploadOnCloudinary(thumbnailLocalPath, thumbnail_upOptions),
-  ]);
-
-  if (!videoFile || !thumbnailFile) {
-    let errorMessage = "";
-    if (!videoFile) errorMessage += "Failed to upload video. ";
-    if (!thumbnailFile) errorMessage += "Failed to upload thumbnail.";
-    throw new ApiError(500, errorMessage);
-  }
-
-  const video = await Video.create({
-    video: {
-      fileId: videoFile.public_id,
-      url: videoFile.playback_url,
-    },
-    thumbnail: {
-      fileId: thumbnailFile.public_id,
-      url: thumbnailFile.secure_url,
-    },
-    duration: videoFile.duration,
-    title,
-    description,
-    isPublished,
-    owner: req.user._id,
-  });
-
-  if (!video) throw new ApiError(500, "Failed to publish video");
-
-  return res
-    .status(201)
-    .json(new ApiResponse(201, video, "Video published successfully"));
-});
+};
 
 const getVideoByIdForGuest = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
