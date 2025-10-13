@@ -1,80 +1,50 @@
-const getAllVideos = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query;
+import { Router } from "express";
+import {
+  deleteVideo,
+  getAllVideos,
+  getVideoById,
+  publishAVideo,
+  togglePublishStatus,
+  updateVideo,
+  getNextVideos,
+  updateVideoViews,
+  getVideoByIdForGuest,
+} from "../controllers/video.controller.js";
+import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { upload } from "../middlewares/multer.middleware.js";
 
-  const pipeline = [];
-  //first create a search index using atlas
-  //then use $search to search the videos
-  //search index is created on title and description fields
-  //here i have created "search-videos" index on "videos" collection
-  if (query) {
-    pipeline.push({
-      $search: {
-        index: "search-videos",
-        text: {
-          query: query,
-          path: ["title", "description"],
-        },
-      },
-    });
-  }
-  if (userId) {
-    if (!isValidObjectId(userId)) {
-      throw new ApiError(400, "Invalid userId");
-    }
+const router = Router();
 
-    pipeline.push({
-      $match: {
-        owner: new mongoose.Types.ObjectId(userId),
+router
+  .route("/")
+  .get(getAllVideos)
+  .post(
+    verifyJWT,
+    upload.fields([
+      {
+        name: "video",
+        maxCount: 1,
       },
-    });
-  }
-  // fetch videos only that are set isPublished as true
-  pipeline.push({ $match: { isPublished: true } });
-
-  //sortBy can be views, createdAt, duration
-  //sortType can be ascending(-1) or descending(1)
-  if (sortBy && sortType) {
-    pipeline.push({
-      $sort: {
-        [sortBy]: sortType === "asc" ? 1 : -1,
+      {
+        name: "thumbnail",
+        maxCount: 1,
       },
-    });
-  } else {
-    pipeline.push({ $sort: { createdAt: -1 } });
-  }
-
-  pipeline.push(
-    {
-      $lookup: {
-        from: "users",
-        localField: "owner",
-        foreignField: "_id",
-        as: "ownerDetails",
-        pipeline: [
-          {
-            $project: {
-              username: 1,
-              "avatar.url": 1,
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: "$ownerDetails",
-    }
+    ]),
+    publishAVideo
   );
 
-  const videoAggregate = Video.aggregate(pipeline);
+router
+  .route("/v/:videoId")
+  .get(verifyJWT, getVideoById)
+  .delete(verifyJWT, deleteVideo)
+  .patch(verifyJWT, upload.single("thumbnail"), updateVideo);
 
-  const options = {
-    page: parseInt(page, 10),
-    limit: parseInt(limit, 10),
-  };
+router.route("/toggle/publish/:videoId").patch(verifyJWT, togglePublishStatus);
 
-  const videos = await Video.aggregatePaginate(videoAggregate, options);
+router.route("/next/:videoId").get(getNextVideos);
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, videos, "Videos fetched successfully"));
-});
+router.route("/v/guest/:videoId").get(getVideoByIdForGuest);
+
+router.route("/update/views/:videoId").patch(verifyJWT, updateVideoViews);
+
+export default router;
