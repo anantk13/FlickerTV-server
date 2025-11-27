@@ -2,7 +2,7 @@
 
 This is the **backend** of **FlickerTV**, a full-stack video-sharing platform inspired by YouTube. It handles authentication, video uploads, user interactions (likes, comments, subscriptions), and integrates with **Cloudinary** for media storage.
 
-🌐 **Live Website**: https://flicker-tv-client-ldike482x-anant-kapoors-projects.vercel.app/ 
+🌐 **Live Website**: https://flicker-tv-client.vercel.app/
 💻 **Client Repo**: https://github.com/anantk13/FlickerTV-client
 
 ---
